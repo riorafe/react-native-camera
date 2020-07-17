@@ -13,7 +13,6 @@ import {
   StyleSheet,
   PermissionsAndroid,
 } from 'react-native';
-
 import type { FaceFeature } from './FaceDetector';
 
 const Rationale = PropTypes.shape({

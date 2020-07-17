@@ -175,9 +175,11 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         final ReactContext context = (ReactContext) getContext();
         context.getJSModule(RCTEventEmitter.class).receiveEvent(
           getId(),
-                CameraViewManager.Events.EVENT_ON_MODEL_PROCESSED.name(),
+                "onModelProcessed",
                 map
         );
+
+        System.out.println("onModelProcessed");
 
         if (willCallBarCodeTask) {
           barCodeScannerTaskLock = true;

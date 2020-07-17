@@ -688,6 +688,7 @@ class Camera extends Component {
               onPictureTaken={this.onPictureTaken}
               onRecordingStart={this.onRecordingStart}
               onRecordingEnd={this.onRecordingEnd}
+              onModelProcessed={() => console.log('test')}
               ratio={this.state.aspectRatioStr}
               flashMode={flashMode}
               zoom={zoom}
