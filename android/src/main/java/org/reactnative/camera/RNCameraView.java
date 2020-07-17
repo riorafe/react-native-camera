@@ -18,6 +18,7 @@ import android.view.View;
 import android.os.AsyncTask;
 import com.facebook.react.bridge.*;
 import com.facebook.react.uimanager.ThemedReactContext;
+import com.facebook.react.uimanager.events.RCTEventEmitter;
 import com.google.android.cameraview.CameraView;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.DecodeHintType;
@@ -168,6 +169,15 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         if (data.length < (1.5 * width * height)) {
             return;
         }
+
+        final WritableMap map = Arguments.createMap();
+        map.putString("data", "data sent from native");
+        final ReactContext context = (ReactContext) getContext();
+        context.getJSModule(RCTEventEmitter.class).receiveEvent(
+          getId(),
+                CameraViewManager.Events.EVENT_ON_MODEL_PROCESSED.name(),
+                map
+        );
 
         if (willCallBarCodeTask) {
           barCodeScannerTaskLock = true;
