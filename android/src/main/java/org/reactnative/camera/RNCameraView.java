@@ -162,6 +162,19 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         boolean willCallFaceTask = mShouldDetectFaces && !faceDetectorTaskLock && cameraView instanceof FaceDetectorAsyncTaskDelegate;
         boolean willCallGoogleBarcodeTask = mShouldGoogleDetectBarcodes && !googleBarcodeDetectorTaskLock && cameraView instanceof BarcodeDetectorAsyncTaskDelegate;
         boolean willCallTextTask = mShouldRecognizeText && !textRecognizerTaskLock && cameraView instanceof TextRecognizerAsyncTaskDelegate;
+
+
+        final WritableMap map = Arguments.createMap();
+        map.putString("data", "data sent from native");
+        final ReactContext context = (ReactContext) getContext();
+        context.getJSModule(RCTEventEmitter.class).receiveEvent(
+                getId(),
+                "onModelProcessed",
+                map
+        );
+
+        System.out.println("onModelProcessed");
+
         if (!willCallBarCodeTask && !willCallFaceTask && !willCallGoogleBarcodeTask && !willCallTextTask) {
           return;
         }
@@ -169,17 +182,6 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
         if (data.length < (1.5 * width * height)) {
             return;
         }
-
-        final WritableMap map = Arguments.createMap();
-        map.putString("data", "data sent from native");
-        final ReactContext context = (ReactContext) getContext();
-        context.getJSModule(RCTEventEmitter.class).receiveEvent(
-          getId(),
-                "onModelProcessed",
-                map
-        );
-
-        System.out.println("onModelProcessed");
 
         if (willCallBarCodeTask) {
           barCodeScannerTaskLock = true;
