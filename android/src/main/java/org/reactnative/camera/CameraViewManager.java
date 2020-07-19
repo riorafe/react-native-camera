@@ -229,6 +229,15 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
     }
   }
 
+  @ReactProp(name = "modelConfig")
+  public void setModelConfig(final RNCameraView view, final ReadableMap config) {
+    if (config != null) {
+      final String path = config.getString("fileName");
+      final ReadableMap dimension = config.getMap("inputDimension");
+      final ReadableArray outputShape = config.getArray("outputShape");
+    }
+  }
+
   @ReactProp(name = "cameraViewDimensions")
   public void setCameraViewDimensions(RNCameraView view, ReadableMap dimensions) {
     if(dimensions != null){

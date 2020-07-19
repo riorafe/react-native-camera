@@ -11,6 +11,7 @@ import android.os.Build;
 import androidx.core.content.ContextCompat;
 
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -35,7 +36,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-public class RNCameraView extends CameraView implements LifecycleEventListener, BarCodeScannerAsyncTaskDelegate, FaceDetectorAsyncTaskDelegate,
+public class RNCameraView extends CameraView implements LifecycleEventListener, ModelProcessorAsyncTaskDelegate ,BarCodeScannerAsyncTaskDelegate, FaceDetectorAsyncTaskDelegate,
     BarcodeDetectorAsyncTaskDelegate, TextRecognizerAsyncTaskDelegate, PictureSavedDelegate {
   private ThemedReactContext mThemedReactContext;
   private Queue<Promise> mPictureTakenPromises = new ConcurrentLinkedQueue<>();
@@ -160,7 +161,7 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
       @Override
       public void onFramePreview(CameraView cameraView, byte[] data, int width, int height, int rotation) {
         int correctRotation = RNCameraViewHelper.getCorrectCameraRotation(rotation, getFacing(), getCameraOrientation());
-        boolean willCallModelTask = mShouldProcessModels && !modelProcessorTaskLock;
+        boolean willCallModelTask = mShouldProcessModels && !modelProcessorTaskLock && cameraView instanceof ModelProcessorAsyncTaskDelegate;
         boolean willCallBarCodeTask = mShouldScanBarCodes && !barCodeScannerTaskLock && cameraView instanceof BarCodeScannerAsyncTaskDelegate;
         boolean willCallFaceTask = mShouldDetectFaces && !faceDetectorTaskLock && cameraView instanceof FaceDetectorAsyncTaskDelegate;
         boolean willCallGoogleBarcodeTask = mShouldGoogleDetectBarcodes && !googleBarcodeDetectorTaskLock && cameraView instanceof BarcodeDetectorAsyncTaskDelegate;
@@ -176,7 +177,8 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
 
         if (willCallModelTask) {
           modelProcessorTaskLock = true;
-          RNCameraViewHelper.emitModelProcessedEvent(cameraView, data);
+          ModelProcessorAsyncTaskDelegate delegate = (ModelProcessorAsyncTaskDelegate) cameraView;
+          new ModelProcessorAsyncTask(delegate, data).execute();
         }
 
         if (willCallBarCodeTask) {
@@ -460,6 +462,16 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
     if (mFaceDetector != null) {
       mFaceDetector.setTracking(trackingEnabled);
     }
+  }
+
+  @Override
+  public void onModelProcessed(byte[] data) {
+    RNCameraViewHelper.emitModelProcessedEvent(this, data);
+  }
+
+  @Override
+  public void onModelProcessComplete() {
+    this.modelProcessorTaskLock = false;
   }
 
   public void setShouldProcessModels(boolean shouldProcessModels) {

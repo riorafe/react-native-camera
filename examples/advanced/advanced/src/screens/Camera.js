@@ -694,7 +694,7 @@ class Camera extends Component {
               maxZoom={MAX_ZOOM}
               useNativeZoom={true}
               onTap={this.onTapToFocus}
-              onModelProcessed={(event) => console.log(JSON.stringify(event.nativeEvent.data))}
+              onModelProcessed={(response) => console.log(JSON.stringify(response.data))}
               whiteBalance={whiteBalance}
               autoFocusPointOfInterest={this.state.focusCoords}
               androidCameraPermissionOptions={{
