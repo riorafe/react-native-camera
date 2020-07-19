@@ -10,6 +10,10 @@ import com.facebook.react.uimanager.annotations.ReactProp;
 import com.google.android.cameraview.AspectRatio;
 import com.google.android.cameraview.Size;
 
+import org.reactnative.camera.tensorflow.Dimension;
+import org.reactnative.camera.tensorflow.TFLiteModel;
+import org.reactnative.camera.utils.ReadableObjectHelper;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -168,7 +172,7 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
   }
 
   @ReactProp(name = "modelProcessorEnabled")
-  public void setModeProcessorEnabled(RNCameraView view, boolean modelProcessorEnabled) {
+  public void setModelProcessorEnabled(RNCameraView view, boolean modelProcessorEnabled) {
     view.setShouldProcessModels(modelProcessorEnabled);
   }
 
@@ -235,6 +239,10 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
       final String path = config.getString("fileName");
       final ReadableMap dimension = config.getMap("inputDimension");
       final ReadableArray outputShape = config.getArray("outputShape");
+      final Dimension dim = new Dimension(dimension.getInt("width"), dimension.getInt("height"));
+      final TFLiteModel model = new TFLiteModel(view.getContext(), path, dim, ReadableObjectHelper.getArrayInt(outputShape));
+
+      view.setTFLiteModel(model);
     }
   }
 
