@@ -213,6 +213,11 @@ export interface RNCameraProps {
   // limiting scan area
   rectOfInterest?: Point;
 
+  // -- TENSORFLOW MODEL
+
+  modelConfig?(config: any): void;
+  onModelProcessed?(response: {data: string}): void;
+
   // -- FACE DETECTION PROPS
 
   onFacesDetected?(response: { faces: Face[] }): void;

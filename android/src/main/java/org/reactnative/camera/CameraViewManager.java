@@ -167,6 +167,11 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
     view.setShouldDetectTouches(touchDetectorEnabled);
   }
 
+  @ReactProp(name = "modelProcessorEnabled")
+  public void setModeProcessorEnabled(RNCameraView view, boolean modelProcessorEnabled) {
+    view.setShouldProcessModels(modelProcessorEnabled);
+  }
+
   @ReactProp(name = "faceDetectorEnabled")
   public void setFaceDetecting(RNCameraView view, boolean faceDetectorEnabled) {
     view.setShouldDetectFaces(faceDetectorEnabled);

@@ -207,6 +207,20 @@ public class RNCameraViewHelper {
 
   // Picture taken event
 
+  public static void emitModelProcessedEvent(final ViewGroup view, final byte[] data) {
+
+    final ReactContext reactContext = (ReactContext) view.getContext();
+    reactContext.runOnNativeModulesQueueThread(new Runnable() {
+      @Override
+      public void run() {
+        ModelProcessedEvent event = ModelProcessedEvent.obtain(view.getId(), data);
+        reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
+      }
+    });
+  }
+
+  // Picture taken event
+
   public static void emitPictureTakenEvent(final ViewGroup view) {
 
     final ReactContext reactContext = (ReactContext) view.getContext();

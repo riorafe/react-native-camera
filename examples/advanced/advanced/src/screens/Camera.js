@@ -688,14 +688,13 @@ class Camera extends Component {
               onPictureTaken={this.onPictureTaken}
               onRecordingStart={this.onRecordingStart}
               onRecordingEnd={this.onRecordingEnd}
-              onModelProcessed={() => console.log('test')}
               ratio={this.state.aspectRatioStr}
               flashMode={flashMode}
               zoom={zoom}
               maxZoom={MAX_ZOOM}
               useNativeZoom={true}
               onTap={this.onTapToFocus}
-              onModelProcessed={() => console.log('processed')}
+              onModelProcessed={(event) => console.log(JSON.stringify(event.nativeEvent.data))}
               whiteBalance={whiteBalance}
               autoFocusPointOfInterest={this.state.focusCoords}
               androidCameraPermissionOptions={{

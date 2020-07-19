@@ -834,6 +834,7 @@ export default class Camera extends React.Component<PropsType, StateType> {
             )}
             onBarCodeRead={this._onObjectDetected(this.props.onBarCodeRead)}
             onTouch={this._onTouch}
+            onModelProcessed={this._onObjectDetected(this.props.onModelProcessed)}
             onFacesDetected={this._onObjectDetected(this.props.onFacesDetected)}
             onTextRecognized={this._onObjectDetected(this.props.onTextRecognized)}
             onPictureSaved={this._onPictureSaved}
@@ -858,6 +859,10 @@ export default class Camera extends React.Component<PropsType, StateType> {
 
     if (props.onGoogleVisionBarcodesDetected) {
       newProps.googleVisionBarcodeDetectorEnabled = true;
+    }
+
+    if (props.onModelProcessed) {
+      newProps.modelProcessorEnabled = true;
     }
 
     if (props.onFacesDetected) {
