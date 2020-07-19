@@ -694,7 +694,14 @@ class Camera extends Component {
               maxZoom={MAX_ZOOM}
               useNativeZoom={true}
               onTap={this.onTapToFocus}
-              onModelProcessed={(response) => console.log(JSON.stringify(response.data))}
+              modelConfig={{
+                fileName: 'posenet_model.tflite',
+                inputDimension: {width: 257, height: 257},
+                outputShape: [1, 9, 9, 17],
+              }}
+              onModelProcessed={(response) =>
+                console.log(JSON.stringify(response.data))
+              }
               whiteBalance={whiteBalance}
               autoFocusPointOfInterest={this.state.focusCoords}
               androidCameraPermissionOptions={{

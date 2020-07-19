@@ -215,7 +215,7 @@ export interface RNCameraProps {
 
   // -- TENSORFLOW MODEL
 
-  modelConfig?(config: any): void;
+  modelConfig: ModelConfig;
   onModelProcessed?(response: {data: string}): void;
 
   // -- FACE DETECTION PROPS
@@ -272,6 +272,15 @@ interface Point<T = number> {
 interface Size<T = number> {
   width: T;
   height: T;
+}
+
+export interface ModelConfig {
+  fileName: string;
+  inputDimension: {
+    width: number;
+    height: number;
+  };
+  outputShape: number[];
 }
 
 export interface Barcode {
