@@ -321,6 +321,8 @@ class Camera extends Component {
       cameraId: null,
       aspectRatioStr: '4:3',
       aspectRatio: parseRatio('4:3'),
+      inference: 0,
+      score: 0,
     };
 
     this._prevPinch = 1;
@@ -674,6 +676,17 @@ class Camera extends Component {
               title={'Camera'}
               navigation={this.props.navigation}
             />
+            <View
+              style={{
+                width: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.4)',
+                zIndex: 10,
+              }}>
+              <Text>{`inference: ${this.state.inference}`}</Text>
+              <Text>{`score: ${this.state.score}`}</Text>
+            </View>
 
             <RNCamera
               ref={(ref) => {
@@ -699,9 +712,12 @@ class Camera extends Component {
                 inputDimension: {width: 257, height: 257},
                 outputShape: [1, 9, 9, 17],
               }}
-              onModelProcessed={(response) =>
-                console.log(JSON.stringify(response.data))
-              }
+              onModelProcessed={(data) => {
+                console.log(`body: ${JSON.stringify(data.body)}`);
+                console.log(`score: ${data.score}`);
+                console.log(`inference: ${data.inference}s`);
+                this.setState({score: data.score, inference: data.inference});
+              }}
               whiteBalance={whiteBalance}
               autoFocusPointOfInterest={this.state.focusCoords}
               androidCameraPermissionOptions={{
