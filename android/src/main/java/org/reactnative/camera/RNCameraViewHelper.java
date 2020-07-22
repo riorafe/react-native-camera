@@ -19,6 +19,7 @@ import com.google.android.cameraview.CameraView;
 import com.google.zxing.Result;
 import org.reactnative.camera.events.*;
 import org.reactnative.barcodedetector.RNBarcodeDetector;
+import org.reactnative.camera.tensorflow.pose.Person;
 import org.reactnative.facedetector.RNFaceDetector;
 
 import java.text.SimpleDateFormat;
@@ -205,8 +206,21 @@ public class RNCameraViewHelper {
 
   }
 
+  // Model pose processed event
+  public static void emitModelPoseProcessedEvent(final ViewGroup view, final Person person, final long inference) {
+    final ReactContext reactContext = (ReactContext) view.getContext();
+    reactContext.runOnNativeModulesQueueThread(new Runnable() {
+      @Override
+      public void run() {
+        final ModelPoseProcessedEvent event = ModelPoseProcessedEvent.obtain(view.getId(), person, inference);
+        reactContext.getNativeModule(UIManagerModule.class).getEventDispatcher().dispatchEvent(event);
+      }
+    });
+  }
+
   // Picture taken event
 
+  @Deprecated
   public static void emitModelProcessedEvent(final ViewGroup view, final byte[] data) {
 
     final ReactContext reactContext = (ReactContext) view.getContext();

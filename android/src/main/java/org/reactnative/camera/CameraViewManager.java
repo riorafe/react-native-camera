@@ -240,9 +240,11 @@ public class CameraViewManager extends ViewGroupManager<RNCameraView> {
       final ReadableMap dimension = config.getMap("inputDimension");
       final ReadableArray outputShape = config.getArray("outputShape");
       final Dimension dim = new Dimension(dimension.getInt("width"), dimension.getInt("height"));
-      final TFLiteModel model = new TFLiteModel(view.getContext(), path, dim, ReadableObjectHelper.getArrayInt(outputShape));
+      final int width = dimension.getInt("width");
+      final int height = dimension.getInt("height");
+      final int output = ReadableObjectHelper.getOutputDimension(outputShape);
 
-      view.setTFLiteModel(model);
+      view.setTFLiteModel(path, width, height, output);
     }
   }
 

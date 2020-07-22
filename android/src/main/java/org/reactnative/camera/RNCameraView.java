@@ -3,17 +3,21 @@ package org.reactnative.camera;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
+import android.content.res.AssetFileDescriptor;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.media.CamcorderProfile;
 import android.os.Build;
 import androidx.core.content.ContextCompat;
 
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
+import android.view.TextureView;
 import android.view.View;
 import android.os.AsyncTask;
 import com.facebook.react.bridge.*;
@@ -26,18 +30,28 @@ import com.google.zxing.MultiFormatReader;
 import com.google.zxing.Result;
 import org.reactnative.barcodedetector.RNBarcodeDetector;
 import org.reactnative.camera.tasks.*;
+import org.reactnative.camera.tensorflow.Dimension;
 import org.reactnative.camera.tensorflow.TFLiteModel;
 import org.reactnative.camera.utils.RNFileUtils;
 import org.reactnative.facedetector.RNFaceDetector;
+import org.tensorflow.lite.Interpreter;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class RNCameraView extends CameraView implements LifecycleEventListener, ModelProcessorAsyncTaskDelegate ,BarCodeScannerAsyncTaskDelegate, FaceDetectorAsyncTaskDelegate,
         BarcodeDetectorAsyncTaskDelegate, TextRecognizerAsyncTaskDelegate, PictureSavedDelegate {
+  private final static int FLOAT_SIZE = Float.SIZE / Byte.SIZE;
+
   private ThemedReactContext mThemedReactContext;
   private Queue<Promise> mPictureTakenPromises = new ConcurrentLinkedQueue<>();
   private Map<Promise, ReadableMap> mPictureTakenOptions = new ConcurrentHashMap<>();
@@ -64,10 +78,17 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
   public volatile boolean textRecognizerTaskLock = false;
 
   // Scanning-related properties
-  private TFLiteModel mTFLiteModel;
   private MultiFormatReader mMultiFormatReader;
   private RNFaceDetector mFaceDetector;
   private RNBarcodeDetector mGoogleBarcodeDetector;
+  private String mModelFile;
+  private Interpreter mModelProcessor;
+  private ByteBuffer mModelInput;
+  private int[] mModelViewBuf;
+  private int mModelImageDimX;
+  private int mModelImageDimY;
+  private int mModelOutputDim;
+  private ByteBuffer mModelOutput;
   private boolean mShouldProcessModels = false;
   private boolean mShouldDetectFaces = false;
   private boolean mShouldGoogleDetectBarcodes = false;
@@ -162,7 +183,7 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
       @Override
       public void onFramePreview(CameraView cameraView, byte[] data, int width, int height, int rotation) {
         int correctRotation = RNCameraViewHelper.getCorrectCameraRotation(rotation, getFacing(), getCameraOrientation());
-        boolean willCallModelTask = mShouldProcessModels && !modelProcessorTaskLock && cameraView instanceof ModelProcessorAsyncTaskDelegate;
+        boolean willCallModelTask = mShouldProcessModels && !modelProcessorTaskLock && mModelProcessor != null & mModelInput != null && mModelOutput != null && cameraView instanceof ModelProcessorAsyncTaskDelegate;
         boolean willCallBarCodeTask = mShouldScanBarCodes && !barCodeScannerTaskLock && cameraView instanceof BarCodeScannerAsyncTaskDelegate;
         boolean willCallFaceTask = mShouldDetectFaces && !faceDetectorTaskLock && cameraView instanceof FaceDetectorAsyncTaskDelegate;
         boolean willCallGoogleBarcodeTask = mShouldGoogleDetectBarcodes && !googleBarcodeDetectorTaskLock && cameraView instanceof BarcodeDetectorAsyncTaskDelegate;
@@ -174,12 +195,6 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
 
         if (data.length < (1.5 * width * height)) {
           return;
-        }
-
-        if (willCallModelTask) {
-          modelProcessorTaskLock = true;
-          ModelProcessorAsyncTaskDelegate delegate = (ModelProcessorAsyncTaskDelegate) cameraView;
-          new ModelProcessorAsyncTask(delegate, data).execute();
         }
 
         if (willCallBarCodeTask) {
@@ -216,6 +231,11 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
           textRecognizerTaskLock = true;
           TextRecognizerAsyncTaskDelegate delegate = (TextRecognizerAsyncTaskDelegate) cameraView;
           new TextRecognizerAsyncTask(delegate, mThemedReactContext, data, width, height, correctRotation, getResources().getDisplayMetrics().density, getFacing(), getWidth(), getHeight(), mPaddingX, mPaddingY).execute();
+        }
+
+        if (willCallModelTask) {
+          modelProcessorTaskLock = true;
+          new ModelProcessorAsyncTask(cameraView, mModelProcessor, mModelInput, mModelOutput, mModelViewBuf, mModelImageDimX, mModelImageDimY, correctRotation).execute();
         }
       }
     });
@@ -470,19 +490,60 @@ public class RNCameraView extends CameraView implements LifecycleEventListener, 
   }
 
   @Override
-  public void onModelProcessed(byte[] data) {
-    if (mTFLiteModel != null) {
-      mTFLiteModel.run(this, data);
-    }
+  public void onModelProcessed(ByteBuffer data, int sourceWidth, int sourceHeight, int sourceRotation) {
+    ByteBuffer dataDetected = data == null ? ByteBuffer.allocate(0) : data;
+    //TODO
   }
 
   @Override
-  public void onModelProcessComplete() {
-    this.modelProcessorTaskLock = false;
+  public void onModelProcessorTaskCompleted() {
+    modelProcessorTaskLock = false;
   }
 
-  public void setTFLiteModel(TFLiteModel model) {
-    this.mTFLiteModel = model;
+  public void setTFLiteModel(String modelFile, int inputDimX, int inputDimY, int outputDim) {
+    this.mModelFile = modelFile;
+    this.mModelImageDimX = inputDimX;
+    this.mModelImageDimY = inputDimY;
+    this.mModelOutputDim = outputDim;
+
+    Log.i("DEBUG", "mModelFile: " + mModelFile);
+    Log.i("DEBUG", "mModelImageDimX: " + mModelImageDimX);
+    Log.i("DEBUG", "mModelImageDimY: " + mModelImageDimY);
+    Log.i("DEBUG", "mModelOutputDim: " + mModelOutputDim);
+
+    if (modelFile != null) {
+      setupModelProcessor();
+    }
+  }
+
+  private void setupModelProcessor() {
+    try {
+      mModelProcessor = new Interpreter(loadModelFile());
+      mModelInput = ByteBuffer
+              .allocateDirect(mModelImageDimX * mModelImageDimY * 3 * FLOAT_SIZE)
+              .order(ByteOrder.nativeOrder());
+      mModelViewBuf = new int[mModelImageDimX * mModelImageDimY];
+      mModelOutput = ByteBuffer
+              .allocateDirect(mModelOutputDim * FLOAT_SIZE)
+              .order(ByteOrder.nativeOrder());
+
+      Log.i("DEBUG", "mModelProcessor: " + mModelProcessor);
+      Log.i("DEBUG", "mModelInput: " + mModelInput);
+      Log.i("DEBUG", "mModelViewBuf: " + mModelViewBuf);
+      Log.i("DEBUG", "mModelOutput: " + mModelOutput);
+    } catch(Exception e) {
+      Log.i("DEBUG", "Error: " + e.getMessage());
+    }
+  }
+
+  private ByteBuffer loadModelFile() throws IOException {
+    InputStream inputStream = mThemedReactContext.getAssets().open(mModelFile);
+    byte[] model = new byte[inputStream.available()];
+    inputStream.read(model);
+    ByteBuffer buffer = ByteBuffer.allocateDirect(model.length).order(ByteOrder.nativeOrder());
+    buffer.put(model);
+
+    return buffer;
   }
 
   public void setShouldProcessModels(boolean shouldProcessModels) {
