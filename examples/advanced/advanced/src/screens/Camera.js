@@ -1,5 +1,6 @@
 import React, {Component} from 'react';
 import {
+  Image,
   Platform,
   StyleSheet,
   Dimensions,
@@ -7,8 +8,10 @@ import {
   Alert,
   SafeAreaView,
   AppState,
+  PermissionsAndroid,
   TouchableOpacity,
 } from 'react-native';
+import CameraRoll from '@react-native-community/cameraroll';
 import Slider from '@react-native-community/slider';
 import _ from 'underscore';
 import {
@@ -24,6 +27,7 @@ import {
   Toast,
 } from 'native-base';
 import {RNCamera} from 'react-native-camera';
+import RNFS from 'react-native-fs';
 import {NavigationEvents} from 'react-navigation';
 
 import conf from 'src/conf';
@@ -36,19 +40,17 @@ import MainHeader from 'src/baseComponents/MainHeader';
 const IS_IOS = Platform.OS == 'ios';
 const touchCoordsSize = 100 * conf.theme.variables.sizeScaling;
 const flashIcons = {
-  on: <Icon transparent name="flash" type="MaterialCommunityIcons"></Icon>,
-  auto: (
-    <Icon transparent name="flash-auto" type="MaterialCommunityIcons"></Icon>
-  ),
-  off: <Icon transparent name="flash-off" type="MaterialCommunityIcons"></Icon>,
-  torch: (
-    <Icon transparent name="flashlight" type="MaterialCommunityIcons"></Icon>
-  ),
+  on: <Icon transparent name="flash" type="MaterialCommunityIcons" />,
+  auto: <Icon transparent name="flash-auto" type="MaterialCommunityIcons" />,
+  off: <Icon transparent name="flash-off" type="MaterialCommunityIcons" />,
+  torch: <Icon transparent name="flashlight" type="MaterialCommunityIcons" />,
 };
 const MAX_ZOOM = 8; // iOS only
 const ZOOM_F = IS_IOS ? 0.01 : 0.1;
 const BACK_TYPE = RNCamera.Constants.Type.back;
 const FRONT_TYPE = RNCamera.Constants.Type.front;
+
+var isReleaseClap = true;
 
 const WB_OPTIONS = [
   RNCamera.Constants.WhiteBalance.auto,
@@ -77,7 +79,7 @@ const CUSTOM_WB_OPTIONS_MAP = {
   blueGainOffset: {label: 'Blue', min: -1.0, max: 1.0, steps: 0.05},
 };
 
-const getCameraType = (type) => {
+const getCameraType = type => {
   if (type == 'AVCaptureDeviceTypeBuiltInTelephotoCamera') {
     return 'zoomed';
   }
@@ -159,6 +161,20 @@ const styles = StyleSheet.create({
     flex: 2,
     marginRight: 6,
   },
+
+  effectSelection: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    margin: 5,
+    opacity: 0.8,
+  },
+
+  effectButton: {
+    opacity: 0.7,
+    margin: 2,
+  },
 });
 
 const cameraNotAuthorized = (
@@ -204,24 +220,22 @@ class CameraSelectorButton extends React.PureComponent {
 
     if (camera.type == BACK_TYPE) {
       if (cameraType == 'wide') {
-        IconComp = (props) => (
-          <Icon {...props} name="zoom-out" type="Feather" />
-        );
+        IconComp = props => <Icon {...props} name="zoom-out" type="Feather" />;
       } else if (cameraType == 'zoomed') {
-        IconComp = (props) => <Icon {...props} name="zoom-in" type="Feather" />;
+        IconComp = props => <Icon {...props} name="zoom-in" type="Feather" />;
       } else {
-        IconComp = (props) => (
+        IconComp = props => (
           <Icon {...props} name="camera-rear" type="MaterialIcons" />
         );
       }
     } else if (camera.type == FRONT_TYPE) {
-      IconComp = (props) => (
+      IconComp = props => (
         <Icon {...props} name="camera-front" type="MaterialIcons" />
       );
     }
     // should never happen
     else {
-      IconComp = (props) => (
+      IconComp = props => (
         <Icon {...props} normal name="ios-reverse-camera" type="Ionicons" />
       );
     }
@@ -240,7 +254,7 @@ class CameraSelector extends React.PureComponent {
 
     if (cameraId != null && cameraIds.length) {
       let newIdx =
-        (cameraIds.findIndex((i) => i.id == cameraId) + 1) % cameraIds.length;
+        (cameraIds.findIndex(i => i.id == cameraId) + 1) % cameraIds.length;
       onChange(cameraIds[newIdx].id);
     } else {
       // if no available camera ids, always call with null
@@ -260,11 +274,7 @@ class CameraSelector extends React.PureComponent {
     if (cameraId == null) {
       return (
         <Button transparent onPress={this.loopCamera} selfCenter>
-          <Icon
-            transparent
-            normal
-            name="ios-reverse-camera"
-            type="Ionicons"></Icon>
+          <Icon transparent normal name="ios-reverse-camera" type="Ionicons" />
         </Button>
       );
     }
@@ -278,11 +288,7 @@ class CameraSelector extends React.PureComponent {
     if (cameraIds.length == 2) {
       return (
         <Button transparent onPress={this.loopCamera} selfCenter>
-          <Icon
-            transparent
-            normal
-            name="ios-reverse-camera"
-            type="Ionicons"></Icon>
+          <Icon transparent normal name="ios-reverse-camera" type="Ionicons" />
         </Button>
       );
     }
@@ -323,6 +329,8 @@ class Camera extends Component {
       aspectRatio: parseRatio('4:3'),
       inference: 0,
       score: 0,
+      clap: 0,
+      effect: null,
     };
 
     this._prevPinch = 1;
@@ -349,7 +357,7 @@ class Camera extends Component {
   };
 
   // audio permission will be android only
-  onCameraStatusChange = (s) => {
+  onCameraStatusChange = s => {
     if (s.cameraStatus == 'READY') {
       let audioDisabled = s.recordAudioPermissionStatus == 'NOT_AUTHORIZED';
       this.setState({audioDisabled: audioDisabled}, async () => {
@@ -370,7 +378,7 @@ class Camera extends Component {
           ids = await this.camera.getCameraIdsAsync();
 
           // map deviceType to our types
-          ids = ids.map((d) => {
+          ids = ids.map(d => {
             d.cameraType = getCameraType(d.deviceType);
             return d;
           });
@@ -391,7 +399,7 @@ class Camera extends Component {
         }
 
         // sort ids so front cameras are first
-        ids = _.sortBy(ids, (v) => (v.type == FRONT_TYPE ? 0 : 1));
+        ids = _.sortBy(ids, v => (v.type == FRONT_TYPE ? 0 : 1));
 
         this.setState({cameraIds: ids, cameraId: cameraId});
       });
@@ -414,7 +422,7 @@ class Camera extends Component {
     }, 150);
   };
 
-  handleAppStateChange = (nextAppState) => {};
+  handleAppStateChange = nextAppState => {};
 
   onDidFocus = () => {
     this.focused = true;
@@ -425,7 +433,7 @@ class Camera extends Component {
     this.stopVideo();
   };
 
-  onPinchProgress = (p) => {
+  onPinchProgress = p => {
     let p2 = p - this._prevPinch;
 
     if (p2 > 0 && p2 > ZOOM_F) {
@@ -437,7 +445,7 @@ class Camera extends Component {
     }
   };
 
-  onTapToFocus = (touchOrigin) => {
+  onTapToFocus = touchOrigin => {
     if (!this.cameraStyle || this.state.takingPic) {
       return;
     }
@@ -544,6 +552,99 @@ class Camera extends Component {
     this.props.navigation.goBack();
   };
 
+  renderBody(width, height) {
+    if (this.state.body) {
+      const elements = [];
+      const keys = Object.keys(this.state.body);
+      const scaleWidth = width / 257;
+      const scaleHeight = height / 257;
+
+      var xpos3 = 100000;
+      var xpos10 = 90000;
+
+      for (let index = 0; index < keys.length; index++) {
+        const key = keys[index];
+        const body = this.state.body[key];
+        const {position, score} = body;
+
+        if (index === 6 && score > 0.5){
+          var xpos6 = position.x * scaleWidth;
+        }
+        if (index === 15 && score > 0.5){
+          var xpos15 = position.x * scaleWidth;
+          var ypos15 = position.y * scaleHeight;
+        }
+
+        if (index === 16 && score > 0.5 && xpos6 != null && xpos15 != null) {
+          var xpos16 = position.x * scaleWidth;
+          var ypos16 = position.y * scaleHeight;
+          var xdiff = Math.abs(xpos15 - xpos16);
+          var ydiff = ypos16 - ypos15;
+          elements.push(
+            <Image
+              style={{
+                top: position.y * scaleHeight - ((xdiff * 2) / 80) * 16,
+                left: xpos6 - ((xdiff * 2) / 80) * 46,
+                height: xdiff * 1,
+                width: xdiff * 2.5,
+                // transform: [{rotateX: ydiff * 0.7}],
+                // rotation: ydiff * 0.7,
+              }}
+              source={require('./Asset/sunglass.png')}
+            />,
+          );
+        }
+
+        if (index === 3 && score > 0.5) {
+          xpos3 = position.x * scaleWidth;
+          // elements.push(
+          //   <View
+          //     style={{
+          //       position: 'absolute',
+          //       top: position.y * scaleHeight - 5,
+          //       left: position.x * scaleWidth - 5,
+          //       height: 10,
+          //       width: 10,
+          //       borderRadius: 5,
+          //       backgroundColor: 'red',
+          //     }}
+          //   />,
+          // );
+        }
+
+        if (index === 10 && score > 0.5) {
+          xpos10 = position.x * scaleWidth;
+          // elements.push(
+          //   <View
+          //     style={{
+          //       position: 'absolute',
+          //       top: position.y * scaleHeight - 5,
+          //       left: position.x * scaleWidth - 5,
+          //       height: 10,
+          //       width: 10,
+          //       borderRadius: 5,
+          //       backgroundColor: 'red',
+          //     }}
+          //   />,
+          // );
+        }
+      }
+
+      if (Math.abs(xpos10 - xpos3) <= 100 && isReleaseClap === true) {
+        this.setState({
+          clap: this.state.clap + 1,
+        });
+        isReleaseClap = false;
+      } else if (Math.abs(xpos10 - xpos3) > 200) {
+        isReleaseClap = true;
+      }
+
+      return elements;
+    } else {
+      return null;
+    }
+  }
+
   render() {
     let {
       orientation,
@@ -588,12 +689,13 @@ class Camera extends Component {
           style={styles.cameraButton}>
           <Icon
             name={disableOrRecording ? 'camera-off' : 'camera'}
-            type="MaterialCommunityIcons"></Icon>
+            type="MaterialCommunityIcons"
+          />
         </Button>
 
         {recording ? (
           <Button transparent rounded onPress={this.stopVideo} danger>
-            <Icon name="video-slash" type="FontAwesome5"></Icon>
+            <Icon name="video-slash" type="FontAwesome5" />
           </Button>
         ) : (
           <Button
@@ -601,7 +703,7 @@ class Camera extends Component {
             rounded
             onPress={this.startVideo}
             disabled={disable}>
-            <Icon name="video" type="FontAwesome5"></Icon>
+            <Icon name="video" type="FontAwesome5" />
           </Button>
         )}
       </React.Fragment>
@@ -668,7 +770,6 @@ class Camera extends Component {
             onDidFocus={this.onDidFocus}
             onDidBlur={this.onDidBlur}
           />
-
           <View style={mainViewStyle}>
             <MainHeader
               transparent
@@ -686,10 +787,10 @@ class Camera extends Component {
               }}>
               <Text>{`inference: ${this.state.inference}`}</Text>
               <Text>{`score: ${this.state.score}`}</Text>
+              <Text>{`clap: ${this.state.clap}`}</Text>
             </View>
-
             <RNCamera
-              ref={(ref) => {
+              ref={ref => {
                 this.camera = ref;
               }}
               style={cameraStyle}
@@ -712,12 +813,13 @@ class Camera extends Component {
                 inputDimension: {width: 257, height: 257},
                 outputShape: [1, 9, 9, 17],
               }}
-              onModelProcessed={(data) => {
-                console.log(`body: ${JSON.stringify(data.body)}`);
-                console.log(`score: ${data.score}`);
-                console.log(`inference: ${data.inference}s`);
-                this.setState({score: data.score, inference: data.inference});
-              }}
+              onModelProcessed={data =>
+                this.setState({
+                  score: data.score,
+                  inference: data.inference,
+                  body: data.body,
+                })
+              }
               whiteBalance={whiteBalance}
               autoFocusPointOfInterest={this.state.focusCoords}
               androidCameraPermissionOptions={{
@@ -751,8 +853,10 @@ class Camera extends Component {
                     left: this.state.touchCoords.x,
                     width: touchCoordsSize,
                     height: touchCoordsSize,
-                  }}></View>
+                  }}
+                />
               ) : null}
+              {this.renderBody(cameraStyle.width, cameraStyle.height)}
             </RNCamera>
 
             {!takingPic &&
@@ -760,6 +864,26 @@ class Camera extends Component {
             !this.state.spinnerVisible &&
             cameraReady ? (
               <SafeAreaView style={styles.actionStyles}>
+                {/* <Image source={require('./Asset/star.gif')} />, */}
+                <React.Fragment>
+                  <View style={styles.effectSelection}>
+                    <Button
+                      style={styles.effectButton}
+                      onPress={() => this.changeEffect('null')}>
+                      <Text>Non</Text>
+                    </Button>
+                    <Button
+                      style={styles.effectButton}
+                      onPress={() => this.changeEffect('A')}>
+                      <Text>A</Text>
+                    </Button>
+                    <Button
+                      style={styles.effectButton}
+                      onPress={() => this.changeEffect('B')}>
+                      <Text>B</Text>
+                    </Button>
+                  </View>
+                </React.Fragment>
                 <React.Fragment>
                   {cameraCount > 2 ? (
                     <View style={styles.cameraSelectionRow}>
@@ -874,7 +998,6 @@ class Camera extends Component {
       // if we have a non original quality, skip processing and compression.
       // we will use JPEG compression on resize.
       let options = {
-        quality: 0.85,
         fixOrientation: true,
         forceUpOrientation: true,
         writeExif: true,
@@ -891,7 +1014,30 @@ class Camera extends Component {
         return;
       }
 
-      Alert.alert('Picture Taken!', JSON.stringify(data, null, 2));
+      async function hasAndroidPermission() {
+        const permission =
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE;
+
+        const hasPermission = await PermissionsAndroid.check(permission);
+        if (hasPermission) {
+          return true;
+        }
+
+        const status = await PermissionsAndroid.request(permission);
+        return status === 'granted';
+      }
+
+      async function savePicture() {
+        if (Platform.OS === 'android' && !(await hasAndroidPermission())) {
+          return;
+        }
+
+        const result = await CameraRoll.saveToCameraRoll(data.uri);
+
+        Alert.alert(`result: ${result}`);
+      }
+
+      savePicture();
     }
   };
 
@@ -965,6 +1111,12 @@ class Camera extends Component {
     });
   };
 
+  changeEffect = name => {
+    this.setState({
+      effect: name,
+    });
+  };
+
   changeCustomWBOption = () => {
     const optionKeys = Object.keys(CUSTOM_WB_OPTIONS_MAP);
     let currentOptionIndex = optionKeys.indexOf(
@@ -976,8 +1128,8 @@ class Camera extends Component {
     });
   };
 
-  changeCustomWBOptionValue = (value) => {
-    this.setState((state) => ({
+  changeCustomWBOptionValue = value => {
+    this.setState(state => ({
       customWhiteBalance: {
         ...state.customWhiteBalance,
         [state.currentCustomWBOption]: value,
@@ -1004,7 +1156,7 @@ class Camera extends Component {
     }
   };
 
-  onCameraChange = (cameraId) => {
+  onCameraChange = cameraId => {
     this.setState({cameraReady: false}, () => {
       runAfterInteractions(() => {
         // cameraId will be null if we failed to get a camera by ID or
@@ -1040,7 +1192,7 @@ class Camera extends Component {
 
 Camera.navigationOptions = ({navigation}) => {
   return {
-    header: (props) => null,
+    header: props => null,
   };
 };
 
